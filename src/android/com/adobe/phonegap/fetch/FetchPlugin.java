@@ -1,5 +1,9 @@
 package com.adobe.phonegap.fetch;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkInfo;
 import android.util.Base64;
 import android.util.Log;
 
@@ -20,18 +24,16 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.net.Proxy;
 
 public class FetchPlugin extends CordovaPlugin {
 
     public static final String LOG_TAG = "FetchPlugin";
 
-    private final OkHttpClient mClient = new OkHttpClient();
-
     @Override
     public boolean execute(final String action, final JSONArray data, final CallbackContext callbackContext) {
 
         if (action.equals("fetch")) {
-
             try {
                 String method = data.getString(0);
                 Log.v(LOG_TAG, "execute: method = " + method.toString());
@@ -85,7 +87,9 @@ public class FetchPlugin extends CordovaPlugin {
 
                 Request request = requestBuilder.build();
 
-                mClient.newCall(request).enqueue(new Callback() {
+                OkHttpClient client = this.buildClient();
+
+                client.newCall(request).enqueue(new Callback() {
                     @Override
                     public void onFailure(Call call, IOException throwable) {
                         throwable.printStackTrace();
@@ -148,5 +152,27 @@ public class FetchPlugin extends CordovaPlugin {
         }
 
         return true;
+    }
+
+    private OkHttpClient buildClient() {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager)this.cordova.getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        final Network[] networks = connectivityManager.getAllNetworks();
+
+        for (final Network network : networks) {
+            final NetworkInfo netInfo = connectivityManager.getNetworkInfo(network);
+
+            // force WiFi socket factory if connected
+            if (netInfo.getType() == ConnectivityManager.TYPE_WIFI && netInfo.getState() == NetworkInfo.State.CONNECTED) {
+                builder.proxy(Proxy.NO_PROXY);
+                builder.socketFactory(network.getSocketFactory());
+                break;
+            }
+        }
+
+        return builder.build();
     }
 }
